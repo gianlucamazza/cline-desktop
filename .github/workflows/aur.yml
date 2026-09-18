@@ -1,0 +1,70 @@
+name: aur
+
+# Pushes PKGBUILD + .SRCINFO + desktop file to the AUR. Does not compile the
+# app. Skips (does not fail) when AUR_SSH_KEY is unset.
+#
+# Before the first CI run:
+#   1. Local first publish: ./scripts/publish-aur.sh
+#   2. Dedicated ed25519 pubkey on https://aur.archlinux.org/account
+#   3. Matching private key as repo secret AUR_SSH_KEY
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - PKGBUILD
+      - .SRCINFO
+      - cline-desktop.desktop
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: archlinux:base-devel
+    steps:
+      - name: Tools
+        run: pacman -Sy --noconfirm --needed git openssh pacman-contrib
+
+      - uses: actions/checkout@v4
+
+      - name: Is the AUR key configured?
+        id: key
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          if [ -z "$AUR_SSH_KEY" ]; then
+            echo "AUR_SSH_KEY is not set — skipping publication."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: A user makepkg will run as
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+          echo "builder ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/builder
+
+      - name: SSH to the AUR
+        if: steps.key.outputs.configured == 'true'
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          install -d -m 700 -o builder -g builder /home/builder/.ssh
+          install -m 600 /dev/null /home/builder/.ssh/id_ed25519
+          printf '%s\n' "$AUR_SSH_KEY" > /home/builder/.ssh/id_ed25519
+          cat > /home/builder/.ssh/known_hosts <<'EOF'
+          aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN
+          EOF
+          chown -R builder:builder /home/builder/.ssh
+          chmod 600 /home/builder/.ssh/id_ed25519 /home/builder/.ssh/known_hosts
+
+      - name: Publish
+        if: steps.key.outputs.configured == 'true'
+        run: |
+          chmod +x scripts/publish-aur.sh
+          sudo -u builder --preserve-env=HOME env HOME=/home/builder \
+            scripts/publish-aur.sh

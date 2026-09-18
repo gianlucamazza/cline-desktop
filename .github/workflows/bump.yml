@@ -1,0 +1,75 @@
+name: bump
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: check for new upstream desktop tag
+        id: check
+        run: |
+          LATEST=$(curl -fsS "https://api.github.com/repos/cline/cline/releases?per_page=40" \
+            | jq -r '[.[] | select(.prerelease==false and (.tag_name|startswith("desktop-v")))][0].tag_name')
+          [[ -n "$LATEST" && "$LATEST" != "null" ]]
+          VER="${LATEST#desktop-v}"
+          CURRENT=$(grep '^pkgver=' PKGBUILD | cut -d= -f2)
+          echo "tag=${LATEST}" >> "$GITHUB_OUTPUT"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "current=${CURRENT}" >> "$GITHUB_OUTPUT"
+          if [[ "$VER" == "$CURRENT" ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Already at ${CURRENT}, nothing to do."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "New upstream desktop release: ${LATEST} (current: ${CURRENT})"
+          fi
+
+      - name: bump PKGBUILD checksums and .SRCINFO
+        if: steps.check.outputs.skip == 'false'
+        run: |
+          VER="${{ steps.check.outputs.version }}"
+          mkdir -p /tmp/pkgbuild-src
+          cp PKGBUILD cline-desktop.desktop /tmp/pkgbuild-src/
+          sed -i "s/^pkgver=.*/pkgver=${VER}/; s/^pkgrel=.*/pkgrel=1/" /tmp/pkgbuild-src/PKGBUILD
+          docker run --rm \
+            -v /tmp/pkgbuild-src:/build \
+            archlinux:base-devel \
+            bash -c "
+              set -e
+              pacman -Syu --noconfirm pacman-contrib
+              useradd -m builder
+              chown -R builder /build
+              su builder -c 'cd /build && updpkgsums && makepkg --printsrcinfo > .SRCINFO'
+            "
+          cp /tmp/pkgbuild-src/PKGBUILD PKGBUILD
+          cp /tmp/pkgbuild-src/.SRCINFO .SRCINFO
+
+      - name: open pull request
+        if: steps.check.outputs.skip == 'false'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: auto-bump
+          commit-message: "bump to ${{ steps.check.outputs.version }}"
+          title: "bump to desktop-v${{ steps.check.outputs.version }}"
+          body: |
+            Unofficial packaging bump to upstream [${{ steps.check.outputs.tag }}](https://github.com/cline/cline/releases/tag/${{ steps.check.outputs.tag }}).
+
+            Not affiliated with Cline. **Do not auto-merge** — run a local `makepkg -s` first, then:
+
+            ```bash
+            ./scripts/publish-aur.sh
+            ```
+          labels: auto-bump
+          delete-branch: false

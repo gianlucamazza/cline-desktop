@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck --shell=bash --severity=error \
+            -e SC2034,SC2154,SC2164 PKGBUILD
+          shellcheck --severity=error scripts/publish-aur.sh
+
+      - name: namcap + SRCINFO + desktop file
+        uses: addnab/docker-run-action@v3
+        with:
+          image: archlinux:base-devel
+          options: -v ${{ github.workspace }}:/pkg -w /pkg
+          run: |
+            pacman -Syu --noconfirm namcap desktop-file-utils
+            useradd -m builder
+            chown -R builder /pkg
+            desktop-file-validate cline-desktop.desktop
+            namcap PKGBUILD
+            su builder -c 'makepkg --printsrcinfo' > /tmp/new.SRCINFO
+            if ! diff -u .SRCINFO /tmp/new.SRCINFO; then
+              echo "ERROR: .SRCINFO is out of date. Run: makepkg --printsrcinfo > .SRCINFO"
+              exit 1
+            fi
