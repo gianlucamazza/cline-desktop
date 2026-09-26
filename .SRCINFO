@@ -1,7 +1,7 @@
 pkgbase = cline-desktop
 	pkgdesc = Cline coding agent as a native desktop app (unofficial Linux build)
-	pkgver = 0.0.32
-	pkgrel = 3
+	pkgver = 0.0.37
+	pkgrel = 1
 	url = https://cline.bot/desktop
 	arch = x86_64
 	arch = aarch64
@@ -29,9 +29,9 @@ pkgbase = cline-desktop
 	options = !lto
 	options = !debug
 	options = !strip
-	source = cline-desktop-0.0.32.tar.gz::https://github.com/cline/cline/archive/refs/tags/desktop-v0.0.32.tar.gz
+	source = cline-desktop-0.0.37.tar.gz::https://github.com/cline/cline/archive/refs/tags/desktop-v0.0.37.tar.gz
 	source = cline-desktop.desktop
-	sha256sums = 19199a217201750acb7d22dca6d6a43ae37616500bfa468d6201c6a2afac89cf
+	sha256sums = 048efc788e11089681a389f4bd2900164c37a136ee8061e04b5eb7421412cd94
 	sha256sums = fe4591dabfdbe6a62389ed7c7ccc7041ab9f83d21a1cde0bd806d06fabc0ae33
 
 pkgname = cline-desktop
