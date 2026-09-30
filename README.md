@@ -38,3 +38,15 @@ first.
 ```
 
 AUR git holds only `PKGBUILD`, `.SRCINFO`, and `cline-desktop.desktop`.
+
+## Troubleshooting
+
+### Blank window on KDE Wayland + NVIDIA
+
+WebKitGTK's DMABUF renderer often fails on NVIDIA under Wayland (`Gdk Protocol error 71` on native Wayland, or `Failed to create GBM buffer` on XWayland). Menu launches set `WEBKIT_DISABLE_DMABUF_RENDERER=1` automatically. If the window is still blank, also force the X11 backend:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 GDK_BACKEND=x11 cline-desktop
+```
+
+See the [AUR package comments](https://aur.archlinux.org/packages/cline-desktop) and [issue #1](https://github.com/gianlucamazza/cline-desktop/issues/1).
